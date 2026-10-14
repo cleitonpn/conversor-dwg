@@ -5,7 +5,7 @@ ARG LIBREDWG_SHA256=62ebb73b984f865960f20ed26619ea5f8789d5e3fd088fa40a2598384da8
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        build-essential ca-certificates curl pkg-config xz-utils \
+        build-essential ca-certificates curl pkg-config python3 xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
