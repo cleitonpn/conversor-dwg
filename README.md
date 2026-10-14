@@ -66,6 +66,18 @@ https://conversor-dwg.exemplo.com
 No backend, defina `ALLOWED_ORIGINS=https://cleitonpn.github.io`. Nunca coloque
 `ASPOSE_CLIENT_SECRET` no JavaScript, no GitHub Pages ou em variaveis publicas.
 
+## Backend no Render
+
+O arquivo `render.yaml` define um Web Service Docker chamado
+`conversor-dwg-api`. No painel do Render, crie um novo Blueprint a partir deste
+repositorio e informe `ASPOSE_CLIENT_ID` e `ASPOSE_CLIENT_SECRET` quando
+solicitado. O health check usa `/api/health`.
+
+Depois que o deploy terminar, copie a URL `https://...onrender.com` e salve-a
+como a variavel de Actions `PUBLIC_API_BASE_URL` no repositorio GitHub. Execute
+novamente o workflow `publicar GitHub Pages` para conectar a interface ao
+backend.
+
 ## Limites conhecidos
 
 - Um DWG 2D produz geometria essencialmente plana no GLB.
