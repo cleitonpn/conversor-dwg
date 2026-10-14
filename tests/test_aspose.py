@@ -90,6 +90,47 @@ async def test_falls_back_to_generic_conversion_after_provider_error() -> None:
         Path(output).unlink(missing_ok=True)
 
 
+@pytest.mark.asyncio
+async def test_falls_back_to_storage_and_deletes_temporary_file() -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(f"{request.method} {request.url.path}")
+        if request.url.path == "/connect/token":
+            return httpx.Response(200, json={"access_token": "token"})
+        if request.url.path in ("/v3.0/cad/glb", "/v3.0/cad/Convert"):
+            return httpx.Response(500, text="provider error")
+        if request.method == "PUT" and "/cad/storage/file/dwg-to-glb/" in request.url.path:
+            return httpx.Response(200, json={"uploaded": [request.url.path]})
+        if request.method == "POST" and request.url.path.endswith("/glb"):
+            assert request.url.params["folder"] == "dwg-to-glb"
+            return httpx.Response(200, content=glb_bytes())
+        if request.method == "DELETE":
+            return httpx.Response(200)
+        raise AssertionError(f"Unexpected request: {request.method} {request.url}")
+
+    source = SpooledTemporaryFile()
+    source.write(b"AC1032fake-drawing")
+    client = AsposeCadClient(
+        Settings("client", "secret"),
+        transport=httpx.MockTransport(handler),
+    )
+
+    output = await client.convert(source, "modelo.dwg")
+    try:
+        assert output.read_bytes() == glb_bytes()
+        assert calls[0:3] == [
+            "POST /connect/token",
+            "PUT /v3.0/cad/glb",
+            "POST /v3.0/cad/Convert",
+        ]
+        assert calls[3].startswith("PUT /v3.0/cad/storage/file/dwg-to-glb/")
+        assert calls[4].startswith("POST /v3.0/cad/")
+        assert calls[5].startswith("DELETE /v3.0/cad/storage/file/dwg-to-glb/")
+    finally:
+        Path(output).unlink(missing_ok=True)
+
+
 def test_hides_provider_stack_trace() -> None:
     message = AsposeCadClient._format_service_error(
         500,

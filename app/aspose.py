@@ -7,6 +7,8 @@ import tempfile
 import time
 from pathlib import Path
 from typing import BinaryIO
+from urllib.parse import quote
+from uuid import uuid4
 
 import httpx
 
@@ -16,6 +18,8 @@ from app.config import Settings
 TOKEN_URL = "https://api.aspose.cloud/connect/token"
 CONVERT_URL = "https://api.aspose.cloud/v3.0/cad/glb"
 GENERIC_CONVERT_URL = "https://api.aspose.cloud/v3.0/cad/Convert"
+STORAGE_FILE_URL = "https://api.aspose.cloud/v3.0/cad/storage/file"
+STORAGE_FOLDER = "dwg-to-glb"
 
 
 class ConversionError(RuntimeError):
@@ -84,7 +88,7 @@ class AsposeCadClient:
                     ("PUT", CONVERT_URL, None),
                     ("POST", GENERIC_CONVERT_URL, {"outputFormat": "GLB"}),
                 )
-                for attempt, (method, url, params) in enumerate(attempts):
+                for method, url, params in attempts:
                     source.seek(0)
                     async with client.stream(
                         method,
@@ -100,13 +104,13 @@ class AsposeCadClient:
                             "drawingData": (
                                 original_name,
                                 source,
-                                "application/acad",
+                                "application/octet-stream",
                             )
                         },
                     ) as response:
                         if response.status_code >= 400:
                             body = (await response.aread()).decode("utf-8", errors="replace")
-                            if attempt == 0 and response.status_code >= 500:
+                            if response.status_code >= 500:
                                 continue
                             raise ConversionError(
                                 self._format_service_error(response.status_code, body)
@@ -116,6 +120,13 @@ class AsposeCadClient:
                             async for chunk in response.aiter_bytes():
                                 destination.write(chunk)
                         break
+                else:
+                    await self._convert_via_storage(
+                        client,
+                        token,
+                        source,
+                        output_path,
+                    )
 
             if output_path.stat().st_size < 12:
                 raise ConversionError("O servico retornou um arquivo GLB vazio ou incompleto.")
@@ -132,6 +143,61 @@ class AsposeCadClient:
         except httpx.HTTPError as exc:
             output_path.unlink(missing_ok=True)
             raise ConversionError("Falha de comunicacao com o servico de conversao.") from exc
+
+    async def _convert_via_storage(
+        self,
+        client: httpx.AsyncClient,
+        token: str,
+        source: BinaryIO,
+        output_path: Path,
+    ) -> None:
+        """Contorna falhas do endpoint multipart convertendo um arquivo armazenado."""
+        remote_name = f"{uuid4().hex}.dwg"
+        remote_path = f"{STORAGE_FOLDER}/{remote_name}"
+        encoded_path = quote(remote_path, safe="/")
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+        }
+
+        source.seek(0)
+        upload_response = await client.put(
+            f"{STORAGE_FILE_URL}/{encoded_path}",
+            headers=headers,
+            files={"File": (remote_name, source, "application/octet-stream")},
+        )
+        if upload_response.status_code >= 400:
+            raise ConversionError(
+                self._format_service_error(upload_response.status_code, upload_response.text)
+            )
+
+        try:
+            stored_url = f"https://api.aspose.cloud/v3.0/cad/{quote(remote_name)}/glb"
+            async with client.stream(
+                "POST",
+                stored_url,
+                params={"folder": STORAGE_FOLDER},
+                headers={**headers, "Content-Type": "application/json"},
+                json={},
+            ) as response:
+                if response.status_code >= 400:
+                    body = (await response.aread()).decode("utf-8", errors="replace")
+                    raise ConversionError(
+                        self._format_service_error(response.status_code, body)
+                    )
+
+                with output_path.open("wb") as destination:
+                    async for chunk in response.aiter_bytes():
+                        destination.write(chunk)
+        finally:
+            try:
+                await client.delete(
+                    f"{STORAGE_FILE_URL}/{encoded_path}",
+                    headers=headers,
+                )
+            except httpx.HTTPError:
+                # A limpeza nao deve esconder o resultado da conversao.
+                pass
 
     @staticmethod
     def _format_service_error(status_code: int, body: str) -> str:
