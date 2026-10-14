@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import tempfile
 import time
@@ -21,6 +22,7 @@ CONVERT_URL = "https://api.aspose.cloud/v3.0/cad/glb"
 GENERIC_CONVERT_URL = "https://api.aspose.cloud/v3.0/cad/Convert"
 STORAGE_FILE_URL = "https://api.aspose.cloud/v3.0/cad/storage/file"
 STORAGE_FOLDER = "dwg-to-glb"
+logger = logging.getLogger(__name__)
 
 
 class ConversionError(RuntimeError):
@@ -111,6 +113,12 @@ class AsposeCadClient:
                     ) as response:
                         if response.status_code >= 400:
                             body = (await response.aread()).decode("utf-8", errors="replace")
+                            logger.warning(
+                                "Aspose stage=%s status=%s request_id=%s",
+                                f"{method} {url.rsplit('/', 1)[-1]}",
+                                response.status_code,
+                                response.headers.get("request-id", "unknown"),
+                            )
                             if response.status_code >= 500:
                                 continue
                             raise ConversionError(
@@ -180,6 +188,11 @@ class AsposeCadClient:
             ) as response:
                 if response.status_code >= 400:
                     await response.aread()
+                    logger.warning(
+                        "Aspose stage=POST Convert-OBJ status=%s request_id=%s",
+                        response.status_code,
+                        response.headers.get("request-id", "unknown"),
+                    )
                     return False
                 with intermediate_path.open("wb") as destination:
                     async for chunk in response.aiter_bytes():
@@ -187,7 +200,8 @@ class AsposeCadClient:
 
             convert_obj_to_glb(intermediate_path, output_path)
             return True
-        except ObjConversionError:
+        except ObjConversionError as exc:
+            logger.warning("Aspose stage=OBJ-to-GLB error=%s", str(exc))
             return False
         finally:
             intermediate_path.unlink(missing_ok=True)
@@ -215,6 +229,11 @@ class AsposeCadClient:
             files={"File": (remote_name, source, "application/octet-stream")},
         )
         if upload_response.status_code >= 400:
+            logger.warning(
+                "Aspose stage=PUT storage status=%s request_id=%s",
+                upload_response.status_code,
+                upload_response.headers.get("request-id", "unknown"),
+            )
             raise ConversionError(
                 self._format_service_error(upload_response.status_code, upload_response.text)
             )
@@ -230,6 +249,11 @@ class AsposeCadClient:
             ) as response:
                 if response.status_code >= 400:
                     body = (await response.aread()).decode("utf-8", errors="replace")
+                    logger.warning(
+                        "Aspose stage=POST stored-GLB status=%s request_id=%s",
+                        response.status_code,
+                        response.headers.get("request-id", "unknown"),
+                    )
                     raise ConversionError(
                         self._format_service_error(response.status_code, body)
                     )
