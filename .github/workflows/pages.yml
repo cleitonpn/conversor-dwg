@@ -26,7 +26,7 @@ jobs:
 
       - name: Preparar site estatico
         env:
-          API_BASE_URL: ${{ vars.PUBLIC_API_BASE_URL }}
+          API_BASE_URL: ${{ vars.PUBLIC_API_BASE_URL || 'https://conversor-dwg-api.onrender.com' }}
         run: |
           mkdir -p _site
           cp -R app/static/. _site/

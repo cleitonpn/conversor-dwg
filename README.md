@@ -73,10 +73,10 @@ O arquivo `render.yaml` define um Web Service Docker chamado
 repositorio e informe `ASPOSE_CLIENT_ID` e `ASPOSE_CLIENT_SECRET` quando
 solicitado. O health check usa `/api/health`.
 
-Depois que o deploy terminar, copie a URL `https://...onrender.com` e salve-a
-como a variavel de Actions `PUBLIC_API_BASE_URL` no repositorio GitHub. Execute
-novamente o workflow `publicar GitHub Pages` para conectar a interface ao
-backend.
+O deploy atual usa `https://conversor-dwg-api.onrender.com` como backend padrao.
+Se o servico mudar de endereco, salve a nova URL como a variavel de Actions
+`PUBLIC_API_BASE_URL` no repositorio e execute novamente o workflow
+`publicar GitHub Pages`.
 
 ## Limites conhecidos
 
