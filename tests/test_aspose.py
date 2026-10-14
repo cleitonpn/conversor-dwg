@@ -124,9 +124,46 @@ async def test_falls_back_to_storage_and_deletes_temporary_file() -> None:
             "PUT /v3.0/cad/glb",
             "POST /v3.0/cad/Convert",
         ]
-        assert calls[3].startswith("PUT /v3.0/cad/storage/file/dwg-to-glb/")
-        assert calls[4].startswith("POST /v3.0/cad/")
-        assert calls[5].startswith("DELETE /v3.0/cad/storage/file/dwg-to-glb/")
+        assert calls[3] == "POST /v3.0/cad/Convert"
+        assert calls[4].startswith("PUT /v3.0/cad/storage/file/dwg-to-glb/")
+        assert calls[5].startswith("POST /v3.0/cad/")
+        assert calls[6].startswith("DELETE /v3.0/cad/storage/file/dwg-to-glb/")
+    finally:
+        Path(output).unlink(missing_ok=True)
+
+
+@pytest.mark.asyncio
+async def test_falls_back_to_obj_and_builds_glb_locally() -> None:
+    calls: list[str] = []
+    obj = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(f"{request.method} {request.url.path}")
+        if request.url.path == "/connect/token":
+            return httpx.Response(200, json={"access_token": "token"})
+        if request.url.path == "/v3.0/cad/glb":
+            return httpx.Response(500, text="provider error")
+        if request.url.params.get("outputFormat") == "GLB":
+            return httpx.Response(500, text="provider error")
+        assert request.url.params["outputFormat"] == "OBJ"
+        return httpx.Response(200, content=obj)
+
+    source = SpooledTemporaryFile()
+    source.write(b"AC1032fake-drawing")
+    client = AsposeCadClient(
+        Settings("client", "secret"),
+        transport=httpx.MockTransport(handler),
+    )
+
+    output = await client.convert(source, "modelo.dwg")
+    try:
+        assert output.read_bytes().startswith(b"glTF")
+        assert calls == [
+            "POST /connect/token",
+            "PUT /v3.0/cad/glb",
+            "POST /v3.0/cad/Convert",
+            "POST /v3.0/cad/Convert",
+        ]
     finally:
         Path(output).unlink(missing_ok=True)
 

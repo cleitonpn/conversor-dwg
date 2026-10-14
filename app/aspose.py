@@ -13,6 +13,7 @@ from uuid import uuid4
 import httpx
 
 from app.config import Settings
+from app.obj_to_glb import ObjConversionError, convert_obj_to_glb
 
 
 TOKEN_URL = "https://api.aspose.cloud/connect/token"
@@ -121,12 +122,16 @@ class AsposeCadClient:
                                 destination.write(chunk)
                         break
                 else:
-                    await self._convert_via_storage(
-                        client,
-                        token,
-                        source,
-                        output_path,
+                    converted = await self._convert_via_obj(
+                        client, token, source, original_name, output_path
                     )
+                    if not converted:
+                        await self._convert_via_storage(
+                            client,
+                            token,
+                            source,
+                            output_path,
+                        )
 
             if output_path.stat().st_size < 12:
                 raise ConversionError("O servico retornou um arquivo GLB vazio ou incompleto.")
@@ -143,6 +148,49 @@ class AsposeCadClient:
         except httpx.HTTPError as exc:
             output_path.unlink(missing_ok=True)
             raise ConversionError("Falha de comunicacao com o servico de conversao.") from exc
+
+    async def _convert_via_obj(
+        self,
+        client: httpx.AsyncClient,
+        token: str,
+        source: BinaryIO,
+        original_name: str,
+        output_path: Path,
+    ) -> bool:
+        fd, intermediate_name = tempfile.mkstemp(prefix="dwg-to-obj-", suffix=".bin")
+        os.close(fd)
+        intermediate_path = Path(intermediate_name)
+        source.seek(0)
+        try:
+            async with client.stream(
+                "POST",
+                GENERIC_CONVERT_URL,
+                params={"outputFormat": "OBJ"},
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/json",
+                },
+                files={
+                    "drawingData": (
+                        original_name,
+                        source,
+                        "application/octet-stream",
+                    )
+                },
+            ) as response:
+                if response.status_code >= 400:
+                    await response.aread()
+                    return False
+                with intermediate_path.open("wb") as destination:
+                    async for chunk in response.aiter_bytes():
+                        destination.write(chunk)
+
+            convert_obj_to_glb(intermediate_path, output_path)
+            return True
+        except ObjConversionError:
+            return False
+        finally:
+            intermediate_path.unlink(missing_ok=True)
 
     async def _convert_via_storage(
         self,
