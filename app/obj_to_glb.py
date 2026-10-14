@@ -44,7 +44,7 @@ def _vertex_index(token: str, vertex_count: int) -> int:
     return index
 
 
-def convert_obj_to_glb(source_path: Path, output_path: Path) -> None:
+def convert_obj_to_glb(source_path: Path, output_path: Path, *, recenter: bool = False) -> None:
     positions = array("f")
     triangles = array("I")
     lines = array("I")
@@ -82,6 +82,14 @@ def convert_obj_to_glb(source_path: Path, output_path: Path) -> None:
 
     if not positions or (not triangles and not lines):
         raise ObjConversionError("O OBJ retornado nao possui geometria exportavel.")
+
+    if recenter:
+        center = [(minimum + maximum) / 2.0 for minimum, maximum in zip(bounds_min, bounds_max)]
+        for offset in range(0, len(positions), 3):
+            for axis in range(3):
+                positions[offset + axis] -= center[axis]
+        bounds_min = [minimum - center[axis] for axis, minimum in enumerate(bounds_min)]
+        bounds_max = [maximum - center[axis] for axis, maximum in enumerate(bounds_max)]
 
     if sys.byteorder != "little":
         positions.byteswap()

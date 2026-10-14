@@ -6,7 +6,7 @@ from app.main import app, get_settings
 
 
 def settings() -> Settings:
-    return Settings("client", "secret", max_upload_mb=1)
+    return Settings(max_upload_mb=1)
 
 
 @pytest.mark.asyncio

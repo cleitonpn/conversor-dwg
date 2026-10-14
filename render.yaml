@@ -8,10 +8,6 @@ services:
     healthCheckPath: /api/health
     autoDeployTrigger: commit
     envVars:
-      - key: ASPOSE_CLIENT_ID
-        sync: false
-      - key: ASPOSE_CLIENT_SECRET
-        sync: false
       - key: ALLOWED_ORIGINS
         value: https://cleitonpn.github.io
       - key: MAX_UPLOAD_MB

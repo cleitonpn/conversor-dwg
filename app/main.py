@@ -10,8 +10,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
-from app.aspose import AsposeCadClient, ConversionError
 from app.config import Settings
+from app.local_converter import ConversionError, LocalDwgConverter
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -35,8 +35,8 @@ def get_settings() -> Settings:
     return Settings.from_env()
 
 
-def get_converter(settings: Settings = Depends(get_settings)) -> AsposeCadClient:
-    return AsposeCadClient(settings)
+def get_converter(settings: Settings = Depends(get_settings)) -> LocalDwgConverter:
+    return LocalDwgConverter(settings)
 
 
 def safe_output_name(original_name: str) -> str:
@@ -71,9 +71,7 @@ async def validate_upload(upload: UploadFile, max_upload_mb: int) -> None:
 async def health(settings: Settings = Depends(get_settings)) -> dict[str, object]:
     return {
         "status": "ok",
-        "converterConfigured": bool(
-            settings.aspose_client_id and settings.aspose_client_secret
-        ),
+        "converterConfigured": True,
         "maxUploadMb": settings.max_upload_mb,
     }
 
@@ -82,7 +80,7 @@ async def health(settings: Settings = Depends(get_settings)) -> dict[str, object
 async def convert_dwg(
     file: UploadFile = File(...),
     settings: Settings = Depends(get_settings),
-    converter: AsposeCadClient = Depends(get_converter),
+    converter: LocalDwgConverter = Depends(get_converter),
 ) -> FileResponse:
     await validate_upload(file, settings.max_upload_mb)
     try:

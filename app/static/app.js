@@ -115,9 +115,9 @@ if (apiBaseUrl === null) {
       maxUploadMb = health.maxUploadMb;
       limit.textContent = `${maxUploadMb} MB`;
       serviceReady = Boolean(health.converterConfigured);
-      serviceStatus.textContent = serviceReady ? "configurado" : "sem credenciais";
+      serviceStatus.textContent = serviceReady ? "motor local" : "indisponivel";
       serviceStatus.className = `status ${serviceReady ? "ready" : "offline"}`;
-      if (!serviceReady) setMessage("Configure as credenciais da Aspose no backend.");
+      if (!serviceReady) setMessage("O motor local de conversao nao esta disponivel.");
       showFile(input.files[0]);
     })
     .catch(() => {

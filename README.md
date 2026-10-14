@@ -1,37 +1,39 @@
-# DWG para GLB
+# DWG 3D para GLB
 
-Aplicacao web simples para enviar um arquivo `.dwg`, converte-lo por meio da
-Aspose.CAD Cloud API e baixar o resultado `.glb`.
+Aplicacao web para converter arquivos `.dwg` com geometria 3D em `.glb` sem
+usar uma API de conversao externa. O processamento acontece no proprio backend:
 
-## Requisitos
+1. o [LibreDWG](https://www.gnu.org/software/libredwg/) le o DWG e gera um DXF temporario;
+2. o `ezdxf` expande blocos e transforma malhas, faces e curvas 3D;
+3. a aplicacao normaliza as unidades para metros, converte de Z-up para Y-up,
+   centraliza o modelo e grava um GLB 2.0.
 
-- Python 3.11 ou superior
-- Uma conta Aspose Cloud com `Client ID` e `Client Secret`
+Os arquivos temporarios sao removidos ao final da requisicao.
 
-Crie as credenciais no [painel da Aspose Cloud](https://dashboard.aspose.cloud/).
-Os arquivos enviados para conversao passam pela infraestrutura da Aspose.
+## Executar com Docker
 
-## Executar localmente
+O Dockerfile compila e instala a versao fixada do LibreDWG. Nenhuma chave ou
+conta externa e necessaria.
+
+```powershell
+docker build -t dwg-to-glb .
+docker run --rm -p 8000:8000 dwg-to-glb
+```
+
+Abra [http://localhost:8000](http://localhost:8000).
+
+## Desenvolvimento sem Docker
+
+Requer Python 3.11 ou superior e o executavel `dwg2dxf` do LibreDWG no `PATH`.
+Tambem e possivel informar o caminho completo em `LIBREDWG_DWG2DXF`.
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
-Copy-Item .env.example .env
-```
-
-Defina as variaveis da `.env` na sessao (ou no seu gerenciador de segredos):
-
-```powershell
-$env:ASPOSE_CLIENT_ID="seu_client_id"
-$env:ASPOSE_CLIENT_SECRET="seu_client_secret"
+$env:LIBREDWG_DWG2DXF="C:\caminho\dwg2dxf.exe"
 uvicorn app.main:app --reload
 ```
-
-Abra [http://localhost:8000](http://localhost:8000).
-
-> O servidor le variaveis de ambiente. O arquivo `.env` e apenas um modelo e
-> nao e carregado automaticamente para evitar comportamento oculto em producao.
 
 ## Testes
 
@@ -39,53 +41,39 @@ Abra [http://localhost:8000](http://localhost:8000).
 pytest
 ```
 
-Os testes nao enviam arquivos para a Aspose e nao consomem a API.
+## GitHub Pages e Render
 
-## Docker
-
-```powershell
-docker build -t dwg-to-glb .
-docker run --rm -p 8000:8000 `
-  -e ASPOSE_CLIENT_ID="seu_client_id" `
-  -e ASPOSE_CLIENT_SECRET="seu_client_secret" `
-  dwg-to-glb
-```
-
-## GitHub Pages
-
-A interface estatica e publicada automaticamente pelo workflow
-`.github/workflows/pages.yml`. O GitHub Pages nao executa o backend Python.
-
-Depois de hospedar o backend em um servico HTTPS, crie no repositorio a
-variavel de Actions `PUBLIC_API_BASE_URL` com a origem do backend, por exemplo:
+A interface estatica e publicada pelo workflow `.github/workflows/pages.yml`.
+Como o GitHub Pages nao executa Python, a conversao roda no Web Service Docker
+do Render definido em `render.yaml`. O frontend usa por padrao:
 
 ```text
-https://conversor-dwg.exemplo.com
+https://conversor-dwg-api.onrender.com
 ```
 
-No backend, defina `ALLOWED_ORIGINS=https://cleitonpn.github.io`. Nunca coloque
-`ASPOSE_CLIENT_SECRET` no JavaScript, no GitHub Pages ou em variaveis publicas.
+Se o endereco mudar, atualize no repositorio a variavel de Actions
+`PUBLIC_API_BASE_URL` e publique o Pages novamente. O backend aceita os ajustes:
 
-## Backend no Render
+- `MAX_UPLOAD_MB` (padrao: `100`)
+- `ALLOWED_ORIGINS` (origens separadas por virgula)
+- `LIBREDWG_DWG2DXF` (opcional, caminho alternativo do executavel)
 
-O arquivo `render.yaml` define um Web Service Docker chamado
-`conversor-dwg-api`. No painel do Render, crie um novo Blueprint a partir deste
-repositorio e informe `ASPOSE_CLIENT_ID` e `ASPOSE_CLIENT_SECRET` quando
-solicitado. O health check usa `/api/health`.
+## Geometria suportada
 
-O deploy atual usa `https://conversor-dwg-api.onrender.com` como backend padrao.
-Se o servico mudar de endereco, salve a nova URL como a variavel de Actions
-`PUBLIC_API_BASE_URL` no repositorio e execute novamente o workflow
-`publicar GitHub Pages`.
+- malhas, polyfaces, `3DFACE`, `SOLID` e `TRACE`;
+- linhas, polilinhas, arcos, circulos, elipses e splines 3D;
+- blocos aninhados, incluindo translacao, rotacao e escala.
 
-## Limites conhecidos
+O conversor nao inventa volume para desenhos 2D. Solidos ACIS (`3DSOLID`,
+`BODY`, `REGION` e `SURFACE`) exigem tessellacao proprietaria. Quando o arquivo
+tambem possui malhas, a geometria de malha real e convertida; quando possui
+somente ACIS, a API recusa a conversao com uma mensagem clara, em vez de gerar
+um GLB vazio. Para incluir esses solidos, converta-os para `MESH`/`3DFACE` no CAD
+antes do upload.
 
-- Um DWG 2D produz geometria essencialmente plana no GLB.
-- Fontes, objetos proxy, materiais e entidades proprietarias podem ser
-  simplificados pelo conversor.
-- O limite de upload padrao e 100 MB e pode ser alterado por `MAX_UPLOAD_MB`.
+Materiais, texturas, fontes e objetos proxy proprietarios podem nao estar
+presentes no resultado.
 
 ## Licenca
 
 MIT
-
