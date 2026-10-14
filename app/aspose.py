@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import tempfile
 import time
@@ -14,6 +15,7 @@ from app.config import Settings
 
 TOKEN_URL = "https://api.aspose.cloud/connect/token"
 CONVERT_URL = "https://api.aspose.cloud/v3.0/cad/glb"
+GENERIC_CONVERT_URL = "https://api.aspose.cloud/v3.0/cad/Convert"
 
 
 class ConversionError(RuntimeError):
@@ -74,37 +76,46 @@ class AsposeCadClient:
         output_path = Path(output_name)
 
         try:
-            source.seek(0)
             async with httpx.AsyncClient(
                 transport=self._transport,
                 timeout=httpx.Timeout(self.settings.request_timeout_seconds),
             ) as client:
-                async with client.stream(
-                    "PUT",
-                    CONVERT_URL,
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/octet-stream",
-                    },
-                    files={
-                        "drawingData": (
-                            original_name,
-                            source,
-                            "application/acad",
-                        )
-                    },
-                ) as response:
-                    if response.status_code >= 400:
-                        body = (await response.aread()).decode("utf-8", errors="replace")
-                        detail = body[:300].strip()
-                        raise ConversionError(
-                            f"A conversao foi recusada pelo servico ({response.status_code})."
-                            + (f" Detalhe: {detail}" if detail else "")
-                        )
+                attempts = (
+                    ("PUT", CONVERT_URL, None),
+                    ("POST", GENERIC_CONVERT_URL, {"outputFormat": "GLB"}),
+                )
+                for attempt, (method, url, params) in enumerate(attempts):
+                    source.seek(0)
+                    async with client.stream(
+                        method,
+                        url,
+                        params=params,
+                        headers={
+                            "Authorization": f"Bearer {token}",
+                            # A API oficial declara application/json mesmo quando
+                            # a resposta bem-sucedida contem o arquivo binario.
+                            "Accept": "application/json",
+                        },
+                        files={
+                            "drawingData": (
+                                original_name,
+                                source,
+                                "application/acad",
+                            )
+                        },
+                    ) as response:
+                        if response.status_code >= 400:
+                            body = (await response.aread()).decode("utf-8", errors="replace")
+                            if attempt == 0 and response.status_code >= 500:
+                                continue
+                            raise ConversionError(
+                                self._format_service_error(response.status_code, body)
+                            )
 
-                    with output_path.open("wb") as destination:
-                        async for chunk in response.aiter_bytes():
-                            destination.write(chunk)
+                        with output_path.open("wb") as destination:
+                            async for chunk in response.aiter_bytes():
+                                destination.write(chunk)
+                        break
 
             if output_path.stat().st_size < 12:
                 raise ConversionError("O servico retornou um arquivo GLB vazio ou incompleto.")
@@ -121,4 +132,23 @@ class AsposeCadClient:
         except httpx.HTTPError as exc:
             output_path.unlink(missing_ok=True)
             raise ConversionError("Falha de comunicacao com o servico de conversao.") from exc
+
+    @staticmethod
+    def _format_service_error(status_code: int, body: str) -> str:
+        message = f"A conversao foi recusada pelo servico ({status_code})."
+        if status_code >= 500:
+            return message + " O provedor encontrou uma falha interna; tente novamente."
+
+        detail = ""
+        try:
+            payload = json.loads(body)
+            if isinstance(payload, dict):
+                detail = str(payload.get("message") or payload.get("error") or "")
+        except (ValueError, TypeError):
+            detail = body
+
+        detail = " ".join(detail.split())[:240]
+        if detail and "exception" not in detail.lower() and " at " not in detail.lower():
+            return f"{message} Detalhe: {detail}"
+        return message
 
