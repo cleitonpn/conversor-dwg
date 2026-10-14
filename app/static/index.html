@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Converta arquivos DWG em GLB pelo navegador." />
+    <title>DWG para GLB</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="intro">
+        <span class="eyebrow">CONVERSOR 3D</span>
+        <h1>DWG <span>→</span> GLB</h1>
+        <p>Transforme seu desenho CAD em um arquivo leve e pronto para visualizacao 3D na web.</p>
+        <div class="features" aria-label="Recursos">
+          <span>Arquivo validado</span>
+          <span>Download automatico</span>
+          <span>Ate <b id="limit">100 MB</b></span>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="upload-title">
+        <div class="card-heading">
+          <div>
+            <span class="step">01</span>
+            <h2 id="upload-title">Selecione o DWG</h2>
+          </div>
+          <span id="service-status" class="status checking">verificando</span>
+        </div>
+
+        <form id="convert-form">
+          <label id="drop-zone" class="drop-zone" for="dwg-file">
+            <input id="dwg-file" name="file" type="file" accept=".dwg" required />
+            <span class="file-icon" aria-hidden="true">DWG</span>
+            <strong id="drop-title">Arraste o arquivo aqui</strong>
+            <span id="drop-subtitle">ou clique para procurar</span>
+          </label>
+
+          <div id="selected-file" class="selected-file" hidden>
+            <div>
+              <strong id="file-name"></strong>
+              <span id="file-size"></span>
+            </div>
+            <button id="clear-file" type="button" aria-label="Remover arquivo">×</button>
+          </div>
+
+          <button id="convert-button" class="convert-button" type="submit" disabled>
+            <span>Converter para GLB</span>
+          </button>
+          <p id="message" class="message" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+    </main>
+
+    <footer>Os arquivos sao enviados ao servico Aspose.CAD Cloud para conversao.</footer>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
+
