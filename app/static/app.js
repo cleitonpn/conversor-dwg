@@ -13,6 +13,11 @@ const serviceStatus = document.querySelector("#service-status");
 const limit = document.querySelector("#limit");
 
 let maxUploadMb = 100;
+let serviceReady = false;
+const configuredApiBaseUrl = (window.APP_CONFIG?.apiBaseUrl || "").replace(/\/$/, "");
+const isGithubPages = window.location.hostname.endsWith(".github.io");
+const apiBaseUrl = configuredApiBaseUrl || (isGithubPages ? null : "");
+const apiUrl = (path) => `${apiBaseUrl}${path}`;
 
 function setMessage(text = "", kind = "") {
   message.textContent = text;
@@ -27,7 +32,7 @@ function showFile(file) {
   fileSize.textContent = file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "";
   dropTitle.textContent = file ? "Arquivo selecionado" : "Arraste o arquivo aqui";
   dropSubtitle.textContent = file ? "clique para substituir" : "ou clique para procurar";
-  convertButton.disabled = !(file && validExtension && validSize);
+  convertButton.disabled = !(file && validExtension && validSize && serviceReady);
 
   if (file && !validExtension) setMessage("Selecione um arquivo .dwg.", "error");
   else if (file && !validSize) setMessage(`O limite e ${maxUploadMb} MB.`, "error");
@@ -70,7 +75,7 @@ form.addEventListener("submit", async (event) => {
   try {
     const payload = new FormData();
     payload.append("file", file);
-    const response = await fetch("/api/convert", { method: "POST", body: payload });
+    const response = await fetch(apiUrl("/api/convert"), { method: "POST", body: payload });
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       throw new Error(error.detail || "Nao foi possivel converter o arquivo.");
@@ -96,16 +101,31 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-fetch("/api/health")
-  .then((response) => response.json())
-  .then((health) => {
-    maxUploadMb = health.maxUploadMb;
-    limit.textContent = `${maxUploadMb} MB`;
-    serviceStatus.textContent = health.converterConfigured ? "configurado" : "sem credenciais";
-    serviceStatus.className = `status ${health.converterConfigured ? "ready" : "offline"}`;
-  })
-  .catch(() => {
-    serviceStatus.textContent = "indisponivel";
-    serviceStatus.className = "status offline";
-  });
+if (apiBaseUrl === null) {
+  serviceStatus.textContent = "backend pendente";
+  serviceStatus.className = "status offline";
+  setMessage("O servico de conversao ainda nao foi conectado.");
+} else {
+  fetch(apiUrl("/api/health"))
+    .then((response) => {
+      if (!response.ok) throw new Error("Servico indisponivel");
+      return response.json();
+    })
+    .then((health) => {
+      maxUploadMb = health.maxUploadMb;
+      limit.textContent = `${maxUploadMb} MB`;
+      serviceReady = Boolean(health.converterConfigured);
+      serviceStatus.textContent = serviceReady ? "configurado" : "sem credenciais";
+      serviceStatus.className = `status ${serviceReady ? "ready" : "offline"}`;
+      if (!serviceReady) setMessage("Configure as credenciais da Aspose no backend.");
+      showFile(input.files[0]);
+    })
+    .catch(() => {
+      serviceReady = false;
+      serviceStatus.textContent = "indisponivel";
+      serviceStatus.className = "status offline";
+      setMessage("Nao foi possivel acessar o servico de conversao.", "error");
+      showFile(input.files[0]);
+    });
+}
 

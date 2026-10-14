@@ -1,0 +1,45 @@
+name: publicar GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar site estatico
+        env:
+          API_BASE_URL: ${{ vars.PUBLIC_API_BASE_URL }}
+        run: |
+          mkdir -p _site
+          cp -R app/static/. _site/
+          node -e 'const fs=require("fs"); fs.writeFileSync("_site/config.js", `window.APP_CONFIG = ${JSON.stringify({apiBaseUrl: process.env.API_BASE_URL || ""})};\n`);'
+
+      - name: Configurar Pages
+        uses: actions/configure-pages@v5
+
+      - name: Empacotar site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+      - name: Publicar
+        id: deployment
+        uses: actions/deploy-pages@v4

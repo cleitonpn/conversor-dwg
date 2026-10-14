@@ -51,6 +51,21 @@ docker run --rm -p 8000:8000 `
   dwg-to-glb
 ```
 
+## GitHub Pages
+
+A interface estatica e publicada automaticamente pelo workflow
+`.github/workflows/pages.yml`. O GitHub Pages nao executa o backend Python.
+
+Depois de hospedar o backend em um servico HTTPS, crie no repositorio a
+variavel de Actions `PUBLIC_API_BASE_URL` com a origem do backend, por exemplo:
+
+```text
+https://conversor-dwg.exemplo.com
+```
+
+No backend, defina `ALLOWED_ORIGINS=https://cleitonpn.github.io`. Nunca coloque
+`ASPOSE_CLIENT_SECRET` no JavaScript, no GitHub Pages ou em variaveis publicas.
+
 ## Limites conhecidos
 
 - Um DWG 2D produz geometria essencialmente plana no GLB.
